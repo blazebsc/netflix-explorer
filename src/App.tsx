@@ -1,61 +1,94 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import "./App.css";
 
+interface MediaFile {
+  file: File;
+  url: string;
+  thumbnail: string;
+}
+
 function App() {
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState<string[]>([]); // Placeholder for search results
+  const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([]);
+  const [playing, setPlaying] = useState<MediaFile | null>(null);
 
-  // Simulate search (replace this with actual search logic later)
-  const searchMedia = async (searchTerm: string) => {
-    // Here you can call your Tauri backend or an API
-    console.log("Searching for:", searchTerm);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-    // Dummy results for now
-    const dummyResults = [
-      `Movie: ${searchTerm} 1`,
-      `Movie: ${searchTerm} 2`,
-      `Show: ${searchTerm} A`,
-      `Show: ${searchTerm} B`
-    ];
-    setResults(dummyResults);
+  const handleFiles = async (files: FileList | null) => {
+    if (!files) return;
+
+    const filesArray = Array.from(files).filter((f) =>
+      f.type.startsWith("video/")
+    );
+
+    const mediaData: MediaFile[] = await Promise.all(
+      filesArray.map(async (file) => {
+        const url = URL.createObjectURL(file);
+        const thumbnail = await getVideoThumbnail(url);
+        return { file, url, thumbnail };
+      })
+    );
+
+    setMediaFiles(mediaData);
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter") {
-      e.preventDefault(); // Prevent form submission reload
-      searchMedia(query);
-    }
+  const getVideoThumbnail = (videoUrl: string): Promise<string> => {
+    return new Promise((resolve) => {
+      const video = document.createElement("video");
+      video.src = videoUrl;
+      video.currentTime = 0.1; // first frame
+      video.muted = true;
+      video.addEventListener("loadeddata", () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = 160;
+        canvas.height = 90;
+        const ctx = canvas.getContext("2d");
+        if (ctx) ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL("image/png"));
+      });
+    });
   };
 
   return (
     <div className="app-container">
-      <header className="app-header">
-        <h1>Netflix Explorer</h1>
-        <p>Browse your media library</p>
+      <header>
+        <h1>Video Explorer</h1>
+        <button onClick={() => fileInputRef.current?.click()}>
+          Select Videos
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="video/*"
+          multiple
+          style={{ display: "none" }}
+          onChange={(e) => handleFiles(e.target.files)}
+        />
       </header>
 
-      <div className="search-container">
-        <input
-          type="text"
-          placeholder="Search for a movie or show..."
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={handleKeyPress}
-        />
-        <button onClick={() => searchMedia(query)}>Search</button>
+      <div className="media-grid">
+        {mediaFiles.length === 0 && <p>No videos selected</p>}
+        {mediaFiles.map((media, i) => (
+          <div
+            key={i}
+            className="media-card"
+            onClick={() => setPlaying(media)}
+          >
+            <img src={media.thumbnail} alt={media.file.name} />
+            <p>{media.file.name}</p>
+          </div>
+        ))}
       </div>
 
-      <div className="media-placeholder">
-        {results.length === 0 ? (
-          <p>Your media will appear here</p>
-        ) : (
-          <ul>
-            {results.map((item, index) => (
-              <li key={index}>{item}</li>
-            ))}
-          </ul>
-        )}
-      </div>
+      {playing && (
+        <div className="video-overlay" onClick={() => setPlaying(null)}>
+          <video
+            src={playing.url}
+            controls
+            autoPlay
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   );
 }
