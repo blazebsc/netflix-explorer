@@ -1,0 +1,14 @@
+# Node
+node_modules/
+dist/
+build/
+
+# Rust
+/target
+
+# VS Code
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
